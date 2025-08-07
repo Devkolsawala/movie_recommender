@@ -44,7 +44,7 @@ class ImprovedMultiGenreRecommender:
         }
         
         # Load model and data
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.model = SentenceTransformer('all-mpnet-base-v2')
         
         print(f"🎬 Media Type: {self.media_type_names.get(self.media_type_mapping.get(media_type, 1), media_type)}")
         if lang_id:
@@ -774,8 +774,8 @@ class ImprovedMultiGenreRecommender:
 # Main execution
 if __name__ == "__main__":
     # Configuration - Update these with your actual data
-    CLICKED_IDS = [138]  # Replace with actual IDs from your dataset
-    MEDIA_TYPE = 'series'  # Options: 'movie', 'series', 'short_drama'
+    CLICKED_IDS = [1075]  # Replace with actual IDs from your dataset
+    MEDIA_TYPE = 'movie'  # Options: 'movie', 'series', 'short_drama'
     LANG_ID = None  # Set to specific language ID or None for all
     ENFORCE_LANGUAGE_MATCHING = True  # Enable language matching
     APPLY_GENRE_SPLIT = True  # Enable genre diversity
@@ -827,80 +827,3 @@ if __name__ == "__main__":
         print("2. Check that your CLICKED_IDS exist in the dataset")
         print("3. Verify the media_type and lang_id values are correct")
         print("4. Ensure you have data for the selected media type and language combination")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

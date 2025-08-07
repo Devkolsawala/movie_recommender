@@ -8,7 +8,7 @@ import os
 
 class EnhancedTextProcessor:
     def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.model = SentenceTransformer('all-mpnet-base-v2')
         
         # Load language mapping
         self.language_map = self._load_language_mapping()
@@ -516,24 +516,3 @@ if __name__ == "__main__":
         # Full processing
         process_dataset_by_language_and_media()
         create_comprehensive_index()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
