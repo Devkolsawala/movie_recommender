@@ -32,7 +32,7 @@ clicked_titles = st.multiselect(
 if st.button("🔮 Get AI Recommendations") and clicked_titles:
     clicked_ids = filtered_df[filtered_df["title"].isin(clicked_titles)]["id"].tolist()
     recommender = ImprovedMultiGenreRecommender(media_type=media_type, lang_id=lang_id)
-    recs = recommender.get_recommendations(clicked_ids=clicked_ids, apply_genre_split=True)
+    recs = recommender.get_recommendations(clicked_ids=clicked_ids)
 
     st.subheader("✨ Recommended For You:")
     st.write(f"Showing {len(recs)} recommendations based on your selection.")
@@ -42,8 +42,6 @@ if st.button("🔮 Get AI Recommendations") and clicked_titles:
             st.markdown(f"**Genres:** {rec['genres']}")
             st.markdown(f"**IMDB Rating:** {rec['imdb_rating']}")
             st.markdown(f"**Views:** {rec['views']}")
-else:
-    st.info("Select at least one title to get recommendations.")
 
 
 
