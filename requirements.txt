@@ -7,3 +7,4 @@ Werkzeug
 Flask-CORS
 Flask
 Torch 
+streamlit
