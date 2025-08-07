@@ -124,6 +124,6 @@ Using `all-mpnet-base-v2` from SentenceTransformers:
 
 ## 🧑‍💻 Author
 
-Made with ❤️ by [Your Name]
+Made  by Dev Kolsawala
 
 Feel free to ⭐ the repo if you found it useful!
