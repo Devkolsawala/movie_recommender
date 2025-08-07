@@ -6,5 +6,6 @@ seaborn
 Werkzeug
 Flask-CORS
 Flask
-Torch 
+torch
 streamlit
+sentence-transformers
