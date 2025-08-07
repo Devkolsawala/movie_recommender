@@ -8,15 +8,17 @@ from sklearn.metrics.pairwise import cosine_similarity
 import re
 from collections import Counter, defaultdict
 import random
+import math
 
 class ImprovedMultiGenreRecommender:
-    def __init__(self, media_type='movie', lang_id=None, top_k=10, view_threshold=10000, 
-                 enforce_language_matching=True):
+    def __init__(self, media_type='movie', lang_id=None, top_k=20, view_threshold=10000, 
+                 enforce_language_matching=True, equal_genre_distribution=True):
         self.media_type = media_type
         self.lang_id = lang_id
         self.top_k = top_k
         self.view_threshold = view_threshold
         self.enforce_language_matching = enforce_language_matching
+        self.equal_genre_distribution = equal_genre_distribution
         
         # Media type mapping (based on ismovie column)
         self.media_type_mapping = {
@@ -50,6 +52,8 @@ class ImprovedMultiGenreRecommender:
         if lang_id:
             lang_name = self.language_map.get(lang_id, f'Language {lang_id}')
             print(f"🌍 Language Filter: {lang_name} (ID: {lang_id})")
+        
+        print(f"📊 Equal Genre Distribution: {'Enabled' if equal_genre_distribution else 'Disabled'}")
         
         # Load from the main dataset
         self._load_and_filter_data()
@@ -320,18 +324,30 @@ class ImprovedMultiGenreRecommender:
         self.df['rating_bucket'] = self.df['imdb_rating'].apply(get_rating_bucket)
     
     def _extract_unique_genres_from_clicked(self, clicked_ids):
-        """Extract unique genres from clicked items (from old script)"""
+        """Extract unique genres from clicked items with improved parsing"""
         clicked_df = self.df[self.df['id'].isin(clicked_ids)]
         all_genres = set()
         genre_groups = []
         
         for _, row in clicked_df.iterrows():
-            if row['genres']:
-                movie_genres = set(g.strip().lower() for g in row['genres'].split(','))
-                genre_groups.append(movie_genres)
-                all_genres.update(movie_genres)
+            if row['genres'] and str(row['genres']).lower() != 'nan':
+                # Clean and normalize genres
+                movie_genres = set()
+                for genre in str(row['genres']).split(','):
+                    cleaned_genre = genre.strip().lower()
+                    if cleaned_genre:  # Ensure non-empty
+                        movie_genres.add(cleaned_genre)
+                
+                if movie_genres:  # Only add if we have valid genres
+                    genre_groups.append(movie_genres)
+                    all_genres.update(movie_genres)
         
         return list(all_genres), genre_groups
+    
+    def _get_all_unique_genres_from_clicked(self, clicked_ids):
+        """Get all unique genres from clicked items as a flat list"""
+        unique_genres, _ = self._extract_unique_genres_from_clicked(clicked_ids)
+        return unique_genres
     
     def _calculate_enhanced_genre_similarity(self, clicked_ids):
         """Enhanced genre similarity with better semantic understanding"""
@@ -490,105 +506,159 @@ class ImprovedMultiGenreRecommender:
         
         return filtered_recommendations
     
-    def _split_recommendations_by_genre(self, recommendations, clicked_ids):
-        """Split recommendations based on clicked item genres (from old script)"""
-        unique_genres, genre_groups = self._extract_unique_genres_from_clicked(clicked_ids)
-        num_unique_genres = len(genre_groups)
+    def _calculate_genre_specific_scores(self, clicked_ids, target_genre):
+        """Calculate scores specifically for a target genre"""
+        semantic_scores = self._calculate_semantic_similarity(clicked_ids)
+        genre_scores = self._calculate_enhanced_genre_similarity(clicked_ids)
+        rating_scores = self._calculate_improved_rating_similarity(clicked_ids)
         
-        if num_unique_genres <= 1:
-            return recommendations[:self.top_k]
-        
-        # Calculate split ratios
-        if num_unique_genres == 2:
-            split_ratios = [5, 5]
-        elif num_unique_genres == 3:
-            split_ratios = [3, 3, 4]
-        else:
-            # For more than 3 genres, distribute evenly
-            base_count = self.top_k // num_unique_genres
-            remainder = self.top_k % num_unique_genres
-            split_ratios = [base_count] * num_unique_genres
-            for i in range(remainder):
-                split_ratios[i] += 1
-        
-        # Group recommendations by their best matching genre group
-        genre_recommendations = [[] for _ in range(num_unique_genres)]
-        unmatched_recommendations = []
-        
-        for rec in recommendations:
-            rec_idx = self.df[self.df['id'] == rec['id']].index[0]
-            rec_genres = set(g.strip().lower() for g in str(self.df.iloc[rec_idx]['genres']).split(','))
+        # Prepare recommendations with genre-specific filtering
+        recommendations = []
+        for idx, (semantic_score, genre_score, rating_score) in enumerate(
+            zip(semantic_scores, genre_scores, rating_scores)
+        ):
+            item = self.df.iloc[idx]
+            item_id = item['id']
+            views = item.get('views', 1000)
             
-            best_match_group = -1
-            best_overlap = 0
+            # Skip clicked items and low-view items
+            if item_id in clicked_ids or views < self.view_threshold:
+                continue
             
-            for i, genre_group in enumerate(genre_groups):
-                overlap = len(rec_genres.intersection(genre_group))
-                if overlap > best_overlap:
-                    best_overlap = overlap
-                    best_match_group = i
+            # Filter by target genre - item must contain this genre
+            item_genres = []
+            if item['genres'] and str(item['genres']).lower() != 'nan':
+                item_genres = [g.strip().lower() for g in str(item['genres']).split(',')]
             
-            if best_match_group >= 0 and best_overlap > 0:
-                genre_recommendations[best_match_group].append(rec)
-            else:
-                unmatched_recommendations.append(rec)
+            if target_genre.lower() not in item_genres:
+                continue
+            
+            # Apply language filtering if enabled
+            if self.enforce_language_matching:
+                clicked_languages = self._get_clicked_languages(clicked_ids)
+                if item['lang_id'] not in clicked_languages:
+                    continue
+            
+            # Calculate content similarity boost
+            content_boost = self._add_content_similarity_boost(clicked_ids, item_id, 0)
+            
+            # Calculate weighted final score with genre-specific boost
+            popularity_score = item['normalized_views']
+            
+            # Give extra boost to exact genre matches
+            genre_match_boost = 0.1 if target_genre.lower() in item_genres else 0.0
+            
+            base_score = (
+                self.weights['semantic_similarity'] * semantic_score +
+                self.weights['genre_similarity'] * genre_score +
+                self.weights['rating_similarity'] * rating_score +
+                self.weights['popularity_boost'] * popularity_score
+            )
+            
+            final_score = base_score + content_boost + genre_match_boost
+            
+            recommendations.append({
+                'id': item_id,
+                'title': item['title'],
+                'final_score': final_score,
+                'semantic_score': semantic_score,
+                'genre_score': genre_score,
+                'rating_score': rating_score,
+                'popularity_score': popularity_score,
+                'content_boost': content_boost,
+                'genre_match_boost': genre_match_boost,
+                'target_genre': target_genre,
+                'views': views,
+                'imdb_rating': item['imdb_rating'],
+                'genres': item['genres'],
+                'lang_id': item.get('lang_id', 'Unknown'),
+                'language_name': self.language_map.get(item.get('lang_id'), 'Unknown'),
+                'ismovie': item['ismovie'],
+                'media_type_name': self.media_type_names.get(item['ismovie'], 'Unknown')
+            })
         
-        # Fill each genre group up to its target count
+        # Sort by final score
+        recommendations.sort(key=lambda x: x['final_score'], reverse=True)
+        return recommendations
+    
+    def _get_equal_distribution_recommendations(self, clicked_ids):
+        """Get recommendations with equal distribution across all clicked genres"""
+        # Get all unique genres from clicked items
+        unique_genres = self._get_all_unique_genres_from_clicked(clicked_ids)
+        
+        if not unique_genres:
+            print("⚠️ No genres found in clicked items. Falling back to standard recommendation.")
+            return self._get_standard_recommendations(clicked_ids)
+        
+        num_genres = len(unique_genres)
+        recommendations_per_genre = max(1, self.top_k // num_genres)
+        remaining_slots = self.top_k % num_genres
+        
+        print(f"🎭 Equal Genre Distribution Strategy:")
+        print(f"   📊 Found {num_genres} unique genres: {unique_genres}")
+        print(f"   📈 Base recommendations per genre: {recommendations_per_genre}")
+        if remaining_slots > 0:
+            print(f"   ➕ {remaining_slots} additional slots for top-performing genres")
+        
+        # Collect recommendations for each genre
+        genre_recommendations = {}
+        all_collected_recommendations = []
+        
+        for genre in unique_genres:
+            print(f"   🔍 Processing genre: {genre.title()}")
+            genre_recs = self._calculate_genre_specific_scores(clicked_ids, genre)
+            
+            # Take the required number for this genre
+            selected_recs = genre_recs[:recommendations_per_genre * 2]  # Get extra for quality
+            genre_recommendations[genre] = selected_recs
+            
+            print(f"      Found {len(selected_recs)} candidates for {genre.title()}")
+        
+        # Distribute recommendations equally
         final_recommendations = []
-        used_recommendations = set()
+        used_ids = set()
         
-        for i, target_count in enumerate(split_ratios):
-            genre_recs = genre_recommendations[i]
+        # First pass: Add base allocation for each genre
+        for genre in unique_genres:
+            genre_recs = genre_recommendations[genre]
             added_count = 0
             
             for rec in genre_recs:
-                if rec['id'] not in used_recommendations and added_count < target_count:
+                if rec['id'] not in used_ids and added_count < recommendations_per_genre:
                     final_recommendations.append(rec)
-                    used_recommendations.add(rec['id'])
+                    used_ids.add(rec['id'])
                     added_count += 1
+            
+            if added_count < recommendations_per_genre:
+                print(f"      ⚠️ Only found {added_count} unique items for {genre.title()} (needed {recommendations_per_genre})")
         
-        # Fill remaining slots with unmatched or remaining recommendations
-        remaining_slots = self.top_k - len(final_recommendations)
-        all_remaining = unmatched_recommendations + [
-            rec for rec in recommendations 
-            if rec['id'] not in used_recommendations
-        ]
+        # Second pass: Distribute remaining slots to genres with best remaining candidates
+        if remaining_slots > 0:
+            print(f"   🎯 Distributing {remaining_slots} remaining slots...")
+            
+            # Collect all remaining candidates from all genres
+            remaining_candidates = []
+            for genre in unique_genres:
+                for rec in genre_recommendations[genre]:
+                    if rec['id'] not in used_ids:
+                        remaining_candidates.append(rec)
+            
+            # Sort by score and take the best remaining ones
+            remaining_candidates.sort(key=lambda x: x['final_score'], reverse=True)
+            
+            for rec in remaining_candidates[:remaining_slots]:
+                if rec['id'] not in used_ids:
+                    final_recommendations.append(rec)
+                    used_ids.add(rec['id'])
         
-        for rec in all_remaining[:remaining_slots]:
-            if rec['id'] not in used_recommendations:
-                final_recommendations.append(rec)
-                used_recommendations.add(rec['id'])
+        # Sort final recommendations by score while maintaining genre diversity info
+        final_recommendations.sort(key=lambda x: x['final_score'], reverse=True)
         
-        return final_recommendations
+        return final_recommendations[:self.top_k]
     
-    def get_recommendations(self, clicked_ids, apply_genre_split=True):
-        """Get improved recommendations with multi-genre support"""
-        clicked_df = self.df[self.df['id'].isin(clicked_ids)]
-        
-        if clicked_df.empty:
-            print("⚠️ No clicked items found in the current dataset.")
-            return []
-        
-        # Get clicked languages for matching
-        clicked_languages = self._get_clicked_languages(clicked_ids)
-        
-        # Show user interaction info
-        unique_genres, genre_groups = self._extract_unique_genres_from_clicked(clicked_ids)
-        print(f"\n🎯 User interacted with {len(clicked_ids)} {self.media_type_names.get(self.media_type_mapping.get(self.media_type), self.media_type)}(s)")
-        
-        # Display clicked items with details
-        for _, row in clicked_df.iterrows():
-            lang_name = self.language_map.get(row['lang_id'], f"Lang {row['lang_id']}")
-            print(f"📊 Clicked: {row['title']} (ID: {row['id']}) | {lang_name} | {row['genres']}")
-        
-        print(f"🎭 Detected {len(genre_groups)} different genre groups")
-        
-        # Show language matching info
-        if self.enforce_language_matching:
-            lang_names = [self.language_map.get(lang_id, f'Lang {lang_id}') for lang_id in clicked_languages]
-            print(f"🔒 Language matching enabled: Will recommend only {', '.join(lang_names)} content")
-        
-        # Calculate similarity scores using enhanced methods
+    def _get_standard_recommendations(self, clicked_ids):
+        """Get standard recommendations without equal genre distribution"""
+        # Calculate similarity scores
         semantic_scores = self._calculate_semantic_similarity(clicked_ids)
         genre_scores = self._calculate_enhanced_genre_similarity(clicked_ids)
         rating_scores = self._calculate_improved_rating_similarity(clicked_ids)
@@ -607,8 +677,10 @@ class ImprovedMultiGenreRecommender:
                 continue
             
             # Apply language filtering if enabled
-            if self.enforce_language_matching and item['lang_id'] not in clicked_languages:
-                continue
+            if self.enforce_language_matching:
+                clicked_languages = self._get_clicked_languages(clicked_ids)
+                if item['lang_id'] not in clicked_languages:
+                    continue
             
             # Calculate content similarity boost
             content_boost = self._add_content_similarity_boost(clicked_ids, item_id, 0)
@@ -645,22 +717,51 @@ class ImprovedMultiGenreRecommender:
         
         # Sort by final score
         recommendations.sort(key=lambda x: x['final_score'], reverse=True)
+        return recommendations[:self.top_k]
+    
+    def get_recommendations(self, clicked_ids):
+        """Get recommendations with optional equal genre distribution"""
+        clicked_df = self.df[self.df['id'].isin(clicked_ids)]
         
-        # Apply genre splitting if requested and multiple genres detected
-        if apply_genre_split and len(genre_groups) > 1:
-            print(f"🎭 Applying genre diversity to ensure balanced recommendations...")
-            final_recommendations = self._split_recommendations_by_genre(
-                recommendations[:self.top_k * 3], clicked_ids  # Get more candidates for splitting
-            )
+        if clicked_df.empty:
+            print("⚠️ No clicked items found in the current dataset.")
+            return []
+        
+        # Get clicked languages for matching
+        clicked_languages = self._get_clicked_languages(clicked_ids)
+        
+        # Show user interaction info
+        unique_genres = self._get_all_unique_genres_from_clicked(clicked_ids)
+        print(f"\n🎯 User interacted with {len(clicked_ids)} {self.media_type_names.get(self.media_type_mapping.get(self.media_type), self.media_type)}(s)")
+        
+        # Display clicked items with details
+        for _, row in clicked_df.iterrows():
+            lang_name = self.language_map.get(row['lang_id'], f"Lang {row['lang_id']}")
+            print(f"📊 Clicked: {row['title']} (ID: {row['id']}) | {lang_name} | {row['genres']}")
+        
+        print(f"🎭 Total unique genres detected: {len(unique_genres)}")
+        if unique_genres:
+            print(f"   Genres: {', '.join([g.title() for g in unique_genres])}")
+        
+        # Show language matching info
+        if self.enforce_language_matching:
+            lang_names = [self.language_map.get(lang_id, f'Lang {lang_id}') for lang_id in clicked_languages]
+            print(f"🔒 Language matching enabled: Will recommend only {', '.join(lang_names)} content")
+        
+        # Get recommendations based on strategy
+        if self.equal_genre_distribution and len(unique_genres) > 1:
+            recommendations = self._get_equal_distribution_recommendations(clicked_ids)
         else:
-            final_recommendations = recommendations[:self.top_k]
+            if self.equal_genre_distribution and len(unique_genres) <= 1:
+                print("📌 Single genre detected, using standard recommendation strategy")
+            recommendations = self._get_standard_recommendations(clicked_ids)
         
-        return final_recommendations
+        return recommendations
     
     def print_detailed_recommendations(self, recommendations, clicked_ids):
-        """Print detailed recommendation results"""
+        """Print detailed recommendation results with genre distribution info"""
         clicked_languages = self._get_clicked_languages(clicked_ids)
-        unique_genres, genre_groups = self._extract_unique_genres_from_clicked(clicked_ids)
+        unique_genres = self._get_all_unique_genres_from_clicked(clicked_ids)
         
         media_type_name = self.media_type_names.get(self.media_type_mapping.get(self.media_type), self.media_type)
         
@@ -671,66 +772,119 @@ class ImprovedMultiGenreRecommender:
             lang_names = [self.language_map.get(lang_id, f'Lang {lang_id}') for lang_id in clicked_languages]
             print(f"🔒 Language Filter: Matching clicked items ({', '.join(lang_names)})")
         
-        if len(genre_groups) > 1:
-            print(f"📊 Genre Split Strategy: {len(genre_groups)} genre groups detected")
-            for i, group in enumerate(genre_groups):
-                print(f"   Group {i+1}: {list(group)}")
+        if self.equal_genre_distribution and len(unique_genres) > 1:
+            print(f"⚖️ Equal Genre Distribution: {len(unique_genres)} genres, ~{self.top_k // len(unique_genres)} items per genre")
+            print(f"   Target Genres: {', '.join([g.title() for g in unique_genres])}")
         
         print("=" * 100)
         
-        # Display recommendations
-        for i, rec in enumerate(recommendations, 1):
-            print(f"{i}. {rec['title']} (ID: {rec['id']})")
-            print(f"   🎬 Media Type: {rec['media_type_name']}")
-            print(f"   🌍 Language: {rec['language_name']}")
-            print(f"   📊 Final Score: {rec['final_score']:.4f}")
-            print(f"   🎭 Genres: {rec['genres']}")
-            print(f"   ⭐ IMDB Rating: {rec['imdb_rating']:.1f}")
-            print(f"   👀 Views: {rec['views']:,}")
+        # Group recommendations by target genre if using equal distribution
+        if self.equal_genre_distribution and len(unique_genres) > 1:
+            genre_groups = {}
+            for rec in recommendations:
+                target_genre = rec.get('target_genre', 'Mixed')
+                if target_genre not in genre_groups:
+                    genre_groups[target_genre] = []
+                genre_groups[target_genre].append(rec)
             
-            # Score breakdown
-            content_info = f" (+{rec['content_boost']:.3f} content)" if rec['content_boost'] > 0 else ""
-            print(f"   📈 Score Breakdown: Semantic={rec['semantic_score']:.3f}, "
-                  f"Genre={rec['genre_score']:.3f}, Rating={rec['rating_score']:.3f}, "
-                  f"Popularity={rec['popularity_score']:.3f}{content_info}")
-            print("-" * 100)
+            # Display by genre groups
+            for genre, genre_recs in genre_groups.items():
+                print(f"\n🎭 {genre.title()} Genre Recommendations ({len(genre_recs)} items):")
+                print("-" * 80)
+                
+                for i, rec in enumerate(genre_recs, 1):
+                    self._print_single_recommendation(rec, i)
+        else:
+            # Display all recommendations together
+            for i, rec in enumerate(recommendations, 1):
+                self._print_single_recommendation(rec, i)
+    
+    def _print_single_recommendation(self, rec, index):
+        """Print a single recommendation with all details"""
+        print(f"{index}. {rec['title']} (ID: {rec['id']})")
+        print(f"   🎬 Media Type: {rec['media_type_name']}")
+        print(f"   🌍 Language: {rec['language_name']}")
+        print(f"   📊 Final Score: {rec['final_score']:.4f}")
+        print(f"   🎭 Genres: {rec['genres']}")
+        print(f"   ⭐ IMDB Rating: {rec['imdb_rating']:.1f}")
+        print(f"   👀 Views: {rec['views']:,}")
+        
+        # Score breakdown
+        content_info = f" (+{rec['content_boost']:.3f} content)" if rec['content_boost'] > 0 else ""
+        genre_match_info = f" (+{rec.get('genre_match_boost', 0):.3f} genre match)" if rec.get('genre_match_boost', 0) > 0 else ""
+        target_genre_info = f" [Target: {rec['target_genre'].title()}]" if 'target_genre' in rec else ""
+        
+        print(f"   📈 Score Breakdown: Semantic={rec['semantic_score']:.3f}, "
+              f"Genre={rec['genre_score']:.3f}, Rating={rec['rating_score']:.3f}, "
+              f"Popularity={rec['popularity_score']:.3f}{content_info}{genre_match_info}{target_genre_info}")
+        print("-" * 100)
     
     def print_simple_recommendations(self, recommendations):
-        """Print recommendations in simple format"""
+        """Print recommendations in simple format with genre info"""
         media_type_name = self.media_type_names.get(self.media_type_mapping.get(self.media_type), self.media_type)
         
         print(f"\n🎬 Simple Format - Top {len(recommendations)} {media_type_name} Recommendations:")
         
         for i, rec in enumerate(recommendations, 1):
             lang_name = rec['language_name']
-            print(f"{i}. {rec['title']} (ID: {rec['id']}) | {lang_name} | Score: {rec['final_score']:.4f} | Views: {rec['views']:,}")
+            target_info = f" [{rec['target_genre'].title()}]" if 'target_genre' in rec else ""
+            print(f"{i}. {rec['title']} (ID: {rec['id']}) | {lang_name} | Score: {rec['final_score']:.4f} | Views: {rec['views']:,}{target_info}")
     
     def print_genre_analysis(self, recommendations, clicked_ids):
-        """Print genre analysis of recommendations vs clicked items"""
-        print(f"\n📊 Genre Analysis:")
+        """Print enhanced genre analysis with distribution info"""
+        print(f"\n📊 Enhanced Genre Analysis:")
         print("=" * 60)
         
         # Clicked items genres
         clicked_df = self.df[self.df['id'].isin(clicked_ids)]
+        unique_clicked_genres = self._get_all_unique_genres_from_clicked(clicked_ids)
+        
         print("🎯 Clicked Items Genres:")
         for _, row in clicked_df.iterrows():
             print(f"  {row['title']} (ID: {row['id']}) → {row['genres']}")
         
+        print(f"\n🔍 Unique Genres from Clicked Items: {len(unique_clicked_genres)}")
+        print(f"   {', '.join([g.title() for g in unique_clicked_genres])}")
+        
         # Recommended items genre distribution
         print("\n🎭 Recommended Items Genre Distribution:")
         genre_counts = {}
+        target_genre_counts = {}
+        
         for rec in recommendations:
+            # Count all genres in recommendations
             genres = rec['genres'].lower() if rec['genres'] else ''
             for genre in genres.split(','):
                 genre = genre.strip()
                 if genre:
                     genre_counts[genre] = genre_counts.get(genre, 0) + 1
+            
+            # Count target genres (for equal distribution)
+            if 'target_genre' in rec:
+                target_genre = rec['target_genre']
+                target_genre_counts[target_genre] = target_genre_counts.get(target_genre, 0) + 1
         
         if genre_counts:
             sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)
+            print("  📈 All Genres in Recommendations:")
             for genre, count in sorted_genres:
                 percentage = (count / len(recommendations)) * 100
-                print(f"  {genre.title()}: {count} items ({percentage:.1f}%)")
+                is_clicked = "✓" if genre in unique_clicked_genres else " "
+                print(f"    {is_clicked} {genre.title()}: {count} items ({percentage:.1f}%)")
+        
+        if target_genre_counts and self.equal_genre_distribution:
+            print("\n  ⚖️ Target Genre Distribution (Equal Distribution Strategy):")
+            for genre, count in sorted(target_genre_counts.items()):
+                percentage = (count / len(recommendations)) * 100
+                print(f"    {genre.title()}: {count} items ({percentage:.1f}%)")
+            
+            # Check distribution balance
+            expected_per_genre = self.top_k // len(unique_clicked_genres)
+            print(f"\n  📊 Distribution Balance Check:")
+            print(f"    Expected per genre: ~{expected_per_genre} items")
+            for genre, count in target_genre_counts.items():
+                balance_status = "✅ Balanced" if abs(count - expected_per_genre) <= 1 else "⚠️ Imbalanced"
+                print(f"    {genre.title()}: {count} items - {balance_status}")
         
         # Language distribution
         print("\n🌍 Language Distribution in Recommendations:")
@@ -774,13 +928,14 @@ class ImprovedMultiGenreRecommender:
 # Main execution
 if __name__ == "__main__":
     # Configuration - Update these with your actual data
-    CLICKED_IDS = [1075]  # Replace with actual IDs from your dataset
+    CLICKED_IDS = [2025]  # Replace with actual IDs from your dataset
     MEDIA_TYPE = 'movie'  # Options: 'movie', 'series', 'short_drama'
     LANG_ID = None  # Set to specific language ID or None for all
     ENFORCE_LANGUAGE_MATCHING = True  # Enable language matching
-    APPLY_GENRE_SPLIT = True  # Enable genre diversity
+    EQUAL_GENRE_DISTRIBUTION = True  # Enable equal genre distribution
+    TOP_K = 20  # Total number of recommendations
     
-    print("🚀 Starting Enhanced Multi-Genre Recommender System")
+    print("🚀 Starting Enhanced Multi-Genre Recommender System with Equal Distribution")
     print("=" * 80)
     
     try:
@@ -788,9 +943,10 @@ if __name__ == "__main__":
         recommender = ImprovedMultiGenreRecommender(
             media_type=MEDIA_TYPE,
             lang_id=LANG_ID,
-            top_k=10,
+            top_k=TOP_K,
             view_threshold=10000,
-            enforce_language_matching=ENFORCE_LANGUAGE_MATCHING
+            enforce_language_matching=ENFORCE_LANGUAGE_MATCHING,
+            equal_genre_distribution=EQUAL_GENRE_DISTRIBUTION
         )
         
         # Validate clicked IDs first
@@ -800,10 +956,7 @@ if __name__ == "__main__":
             print("\n❌ No valid clicked IDs found. Please update CLICKED_IDS with valid IDs from your dataset.")
         else:
             # Get recommendations
-            recommendations = recommender.get_recommendations(
-                clicked_ids=valid_clicked_ids,
-                apply_genre_split=APPLY_GENRE_SPLIT
-            )
+            recommendations = recommender.get_recommendations(clicked_ids=valid_clicked_ids)
             
             if recommendations:
                 # Print detailed results
@@ -812,10 +965,16 @@ if __name__ == "__main__":
                 # Print simple format
                 recommender.print_simple_recommendations(recommendations)
                 
-                # Print genre analysis
+                # Print enhanced genre analysis
                 recommender.print_genre_analysis(recommendations, valid_clicked_ids)
                 
                 print(f"\n✅ Successfully generated {len(recommendations)} recommendations!")
+                if EQUAL_GENRE_DISTRIBUTION:
+                    unique_genres = recommender._get_all_unique_genres_from_clicked(valid_clicked_ids)
+                    if len(unique_genres) > 1:
+                        print(f"🎭 Applied equal distribution across {len(unique_genres)} genres")
+                    else:
+                        print("📌 Single genre detected, used standard recommendation")
                 
             else:
                 print("\n❌ No recommendations generated. Try lowering view_threshold or checking your data.")
