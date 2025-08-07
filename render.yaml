@@ -1,0 +1,14 @@
+# render.yaml
+services:
+  - type: web
+    name: ai-movie-recommender
+    env: python
+    plan: starter  # Free tier
+    buildCommand: pip install -r requirements.txt
+    startCommand: python flask_api_server.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3..8.20
+      - key: FLASK_ENV
+        value: production
+    healthCheckPath: /api/health

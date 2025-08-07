@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Movie Recommendation System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            padding: 20px 0;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .selection-panel, .recommendations-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-title {
+            font-size: 1.5rem;
+            color: #4a5568;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .form-group select, .form-group input {
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-group select:focus, .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .movie-search {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .movie-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .movie-option {
+            padding: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f7fafc;
+            transition: background-color 0.2s ease;
+        }
+
+        .movie-option:hover {
+            background-color: #f7fafc;
+        }
+
+        .movie-option:last-child {
+            border-bottom: none;
+        }
+
+        .movie-info {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-top: 2px;
+        }
+
+        .selected-movies {
+            margin-bottom: 20px;
+        }
+
+        .selected-movie-item {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .movie-details h4 {
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .movie-meta {
+            font-size: 0.85rem;
+            color: #718096;
+        }
+
+        .remove-btn {
+            background: #e53e3e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background-color 0.2s ease;
+        }
+
+        .remove-btn:hover {
+            background: #c53030;
+        }
+
+        .get-recommendations-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .get-recommendations-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .get-recommendations-btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .recommendations-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .recommendation-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .recommendation-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        .recommendation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .recommendation-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .recommendation-score {
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .recommendation-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .meta-item {
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+
+        .meta-label {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .score-breakdown {
+            background: #f7fafc;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 0.85rem;
+            color: #4a5568;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-left: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .stats-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .filters {
+                grid-template-columns: 1fr;
+            }
+            
+            .recommendation-meta {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🎬 AI Movie Recommendation System</h1>
+            <p>Discover your next favorite movie or series using advanced AI-powered recommendations</p>
+        </header>
+
+        <div class="stats-panel">
+            <h2 class="panel-title">📊 Dataset Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number" id="totalMovies">-</div>
+                    <div class="stat-label">Total Movies</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalSeries">-</div>
+                    <div class="stat-label">Total Series</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalLanguages">-</div>
+                    <div class="stat-label">Languages</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalGenres">-</div>
+                    <div class="stat-label">Unique Genres</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="selection-panel">
+                <h2 class="panel-title">🎯 Select Your Preferences</h2>
+                
+                <div class="filters">
+                    <div class="form-group">
+                        <label for="mediaType">Media Type</label>
+                        <select id="mediaType">
+                            <option value="">All Types</option>
+                            <option value="movie">Movies</option>
+                            <option value="series">TV Series</option>
+                            <option value="short_drama">Short Dramas</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="language">Language</label>
+                        <select id="language">
+                            <option value="">All Languages</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="movie-search">
+                    <div class="form-group">
+                        <label for="movieSearch">Search Movies/Series</label>
+                        <input type="text" id="movieSearch" placeholder="Type to search for movies or series...">
+                    </div>
+                    <div class="movie-dropdown" id="movieDropdown"></div>
+                </div>
+
+                <div class="selected-movies">
+                    <label>Selected Items (Click to add more)</label>
+                    <div id="selectedMoviesList"></div>
+                </div>
+
+                <button class="get-recommendations-btn" id="getRecommendations" disabled>
+                    Get AI Recommendations
+                </button>
+            </div>
+
+            <div class="recommendations-panel">
+                <h2 class="panel-title">🎭 AI-Powered Recommendations</h2>
+                <div id="recommendationsList" class="empty-state">
+                    <p>👆 Select some movies or series from the left panel to get personalized AI recommendations!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE_URL = 'http://localhost:5000/api';
+        
+        let selectedMovies = [];
+        let availableMovies = [];
+        let availableLanguages = [];
+        let isLoading = false;
+
+        // Initialize the application
+        async function initializeApp() {
+            showLoadingState();
+            try {
+                await Promise.all([
+                    loadLanguages(),
+                    loadDatasetStats()
+                ]);
+                setupEventListeners();
+                hideLoadingState();
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                showError('Failed to initialize the application. Please check if the API server is running.');
+            }
+        }
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/languages`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    availableLanguages = data.languages;
+                    populateLanguageFilter();
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                console.error('Error loading languages:', error);
+                // Fallback to default languages
+                availableLanguages = [
+                    {id: 1, name: "English"},
+                    {id: 2, name: "हिन्दी"},
+                    {id: 24, name: "Korean"},
+                    {id: 4, name: "Español"}
+                ];
+                populateLanguageFilter();
+            }
+        }
+
+        async function loadDatasetStats() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/dataset/stats`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateStatsDisplay(data.stats);
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                console.error('Error loading dataset stats:', error);
+                // Show placeholder stats
+                updateStatsDisplay({
+                    total_movies: '-',
+                    total_series: '-',
+                    total_languages: '-',
+                    unique_genres: '-'
+                });
+            }
+        }
+
+        function populateLanguageFilter() {
+            const languageSelect = document.getElementById('language');
+            languageSelect.innerHTML = '<option value="">All Languages</option>';
+            
+            availableLanguages.forEach(lang => {
+                const option = document.createElement('option');
+                option.value = lang.id;
+                option.textContent = lang.name;
+                languageSelect.appendChild(option);
+            });
+        }
+
+        function updateStatsDisplay(stats) {
+            document.getElementById('totalMovies').textContent = stats.total_movies || '-';
+            document.getElementById('totalSeries').textContent = stats.total_series || '-';
+            document.getElementById('totalLanguages').textContent = stats.total_languages || '-';
+            document.getElementById('totalGenres').textContent = stats.unique_genres || '-';
+        }
+
+        function setupEventListeners() {
+            const movieSearch = document.getElementById('movieSearch');
+            const mediaTypeFilter = document.getElementById('mediaType');
+            const languageFilter = document.getElementById('language');
+            const getRecommendationsBtn = document.getElementById('getRecommendations');
+
+            movieSearch.addEventListener('input', handleMovieSearch);
+            movieSearch.addEventListener('focus', showDropdown);
+            document.addEventListener('click', hideDropdown);
+
+            mediaTypeFilter.addEventListener('change', updateFilters);
+            languageFilter.addEventListener('change', updateFilters);
+
+            getRecommendationsBtn.addEventListener('click', getRecommendations);
+        }
+
+        async function handleMovieSearch(e) {
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                hideDropdown();
+                return;
+            }
+
+            if (isLoading) return;
+            isLoading = true;
+
+            try {
+                const mediaType = document.getElementById('mediaType').value;
+                const language = document.getElementById('language').value;
+                
+                const params = new URLSearchParams({
+                    q: query,
+                    limit: 10
+                });
+                
+                if (mediaType) params.append('media_type', mediaType);
+                if (language) params.append('lang_id', language);
+
+                const response = await fetch(`${API_BASE_URL}/movies/search?${params}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    showMovieDropdown(data.results);
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                console.error('Error searching movies:', error);
+                showMovieDropdown([]);
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        function showMovieDropdown(movies) {
+            const dropdown = document.getElementById('movieDropdown');
+            dropdown.innerHTML = '';
+
+            if (movies.length === 0) {
+                dropdown.innerHTML = '<div class="movie-option">No movies found</div>';
+            } else {
+                movies.forEach(movie => {
+                    const option = document.createElement('div');
+                    option.className = 'movie-option';
+                    option.innerHTML = `
+                        <div><strong>${movie.title}</strong></div>
+                        <div class="movie-info">
+                            ${movie.media_type} • ${movie.language} • ${movie.genres} • ⭐ ${movie.imdb_rating.toFixed(1)}
+                        </div>
+                    `;
+                    option.addEventListener('click', () => selectMovie(movie));
+                    dropdown.appendChild(option);
+                });
+            }
+
+            dropdown.style.display = 'block';
+        }
+
+        function hideDropdown(e) {
+            const dropdown = document.getElementById('movieDropdown');
+            const searchInput = document.getElementById('movieSearch');
+            if (!e || (!dropdown.contains(e.target) && e.target !== searchInput)) {
+                dropdown.style.display = 'none';
+            }
+        }
+
+        function showDropdown() {
+            const query = document.getElementById('movieSearch').value;
+            if (query.length >= 2) {
+                handleMovieSearch({target: {value: query}});
+            }
+        }
+
+        function selectMovie(movie) {
+            if (!selectedMovies.find(m => m.id === movie.id)) {
+                selectedMovies.push(movie);
+                updateSelectedMoviesList();
+                updateRecommendationButton();
+            }
+            document.getElementById('movieSearch').value = '';
+            hideDropdown();
+        }
+
+        function removeMovie(movieId) {
+            selectedMovies = selectedMovies.filter(m => m.id !== movieId);
+            updateSelectedMoviesList();
+            updateRecommendationButton();
+        }
+
+        function updateSelectedMoviesList() {
+            const list = document.getElementById('selectedMoviesList');
+            if (selectedMovies.length === 0) {
+                list.innerHTML = '<p style="color: #718096; text-align: center; padding: 20px;">No items selected</p>';
+                return;
+            }
+
+            list.innerHTML = selectedMovies.map(movie => `
+                <div class="selected-movie-item">
+                    <div class="movie-details">
+                        <h4>${movie.title}</h4>
+                        <div class="movie-meta">
+                            ${movie.media_type} • ${movie.language} • ${movie.genres} • ⭐ ${movie.imdb_rating.toFixed(1)}
+                        </div>
+                    </div>
+                    <button class="remove-btn" onclick="removeMovie(${movie.id})">Remove</button>
+                </div>
+            `).join('');
+        }
+
+        function updateRecommendationButton() {
+            const btn = document.getElementById('getRecommendations');
+            btn.disabled = selectedMovies.length === 0;
+            btn.textContent = selectedMovies.length === 0 ? 
+                'Get AI Recommendations' : 
+                `Get Recommendations for ${selectedMovies.length} item${selectedMovies.length > 1 ? 's' : ''}`;
+        }
+
+        function updateFilters() {
+            // Filters are now applied in real-time during search
+            // No need to maintain a local filtered list
+        }
+
+        async function getRecommendations() {
+            if (selectedMovies.length === 0) return;
+
+            const recommendationsList = document.getElementById('recommendationsList');
+            
+            // Show loading state
+            recommendationsList.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>AI is analyzing your preferences and generating personalized recommendations...</p>
+                    <p style="font-size: 0.9rem; color: #718096; margin-top: 10px;">
+                        Using advanced semantic similarity and genre matching algorithms
+                    </p>
+                </div>
+            `;
+
+            try {
+                // Determine the media type from selected movies
+                const mediaTypes = [...new Set(selectedMovies.map(m => getMediaTypeKey(m.ismovie)))];
+                const langIds = [...new Set(selectedMovies.map(m => m.lang_id))];
+                
+                // Use the most common media type and language
+                const primaryMediaType = mediaTypes[0] || 'movie';
+                const primaryLangId = langIds.length === 1 ? langIds[0] : null;
+
+                const requestData = {
+                    clicked_ids: selectedMovies.map(m => m.id),
+                    media_type: primaryMediaType,
+                    lang_id: primaryLangId,
+                    top_k: 10
+                };
+
+                const response = await fetch(`${API_BASE_URL}/recommendations`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayRecommendations(data.recommendations);
+                } else {
+                    throw new Error(data.error);
+                }
+
+            } catch (error) {
+                console.error('Error getting recommendations:', error);
+                recommendationsList.innerHTML = `
+                    <div class="empty-state">
+                        <p style="color: #e53e3e;">⚠️ Error getting recommendations: ${error.message}</p>
+                        <p style="font-size: 0.9rem; color: #718096; margin-top: 10px;">
+                            Please make sure the API server is running and try again.
+                        </p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayRecommendations(recommendations) {
+            const recommendationsList = document.getElementById('recommendationsList');
+            
+            if (recommendations.length === 0) {
+                recommendationsList.innerHTML = `
+                    <div class="empty-state">
+                        <p>No recommendations found. Try selecting different items or adjusting your filters.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            recommendationsList.innerHTML = recommendations.map((rec, index) => `
+                <div class="recommendation-item">
+                    <div class="recommendation-header">
+                        <div>
+                            <div class="recommendation-title">${index + 1}. ${rec.title}</div>
+                            <div style="font-size: 0.9rem; color: #718096;">ID: ${rec.id}</div>
+                        </div>
+                        <div class="recommendation-score">${rec.final_score.toFixed(4)}</div>
+                    </div>
+                    
+                    <div class="recommendation-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">Media Type:</span> ${rec.media_type_name}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Language:</span> ${rec.language_name}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Genres:</span> ${rec.genres}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">IMDB Rating:</span> ⭐ ${rec.imdb_rating.toFixed(1)}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Views:</span> 👀 ${rec.views.toLocaleString()}
+                        </div>
+                    </div>
+                    
+                    <div class="score-breakdown">
+                        <strong>AI Score Breakdown:</strong>
+                        Semantic=${rec.semantic_score.toFixed(3)}, 
+                        Genre=${rec.genre_score.toFixed(3)}, 
+                        Rating=${rec.rating_score.toFixed(3)}, 
+                        Popularity=${rec.popularity_score.toFixed(3)}
+                        ${rec.content_boost > 0 ? `, Content Boost=+${rec.content_boost.toFixed(3)}` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getMediaTypeKey(ismovie) {
+            const mapping = {0: 'series', 1: 'movie', 2: 'short_drama'};
+            return mapping[ismovie] || 'movie';
+        }
+
+        function showLoadingState() {
+            document.body.style.opacity = '0.7';
+            document.body.style.pointerEvents = 'none';
+        }
+
+        function hideLoadingState() {
+            document.body.style.opacity = '1';
+            document.body.style.pointerEvents = 'auto';
+        }
+
+        function showError(message) {
+            const container = document.querySelector('.container');
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = `
+                background: #fed7d7;
+                color: #c53030;
+                padding: 15px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                text-align: center;
+                border: 1px solid #feb2b2;
+            `;
+            errorDiv.innerHTML = `⚠️ ${message}`;
+            container.insertBefore(errorDiv, container.firstChild);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 10000);
+        }
+
+        // Initialize the app when the page loads
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+</html>
