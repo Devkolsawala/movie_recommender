@@ -3,3 +3,7 @@ pandas
 scikit-learn
 matplotlib
 seaborn
+Werkzeug
+Flask-CORS
+Flask
+Torch 
