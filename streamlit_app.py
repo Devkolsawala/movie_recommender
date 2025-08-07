@@ -34,7 +34,7 @@ if st.button("🔮 Get AI Recommendations") and clicked_titles:
     recommender = ImprovedMultiGenreRecommender(media_type=media_type, lang_id=lang_id)
     recs = recommender.get_recommendations(clicked_ids=clicked_ids)
 
-    st.subheader("✨ Recommended For You:")
+    st.subheader("✨ Here Are 20 Movies Recommended for You Based on Your Current Preferences")
     st.write(f"Showing {len(recs)} recommendations based on your selection.")
 
     for idx, rec in enumerate(recs, start=1):
