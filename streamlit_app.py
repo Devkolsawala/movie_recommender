@@ -66,11 +66,20 @@ if st.button("🔮 Get AI Recommendations"):
                 # Get clicked item IDs
                 clicked_ids = filtered_df[filtered_df["title"].isin(clicked_titles)]["id"].tolist()
                 
-                # Create recommender
-                recommender = ImprovedMultiGenreRecommender(media_type=media_type, lang_id=lang_id)
+                # Create recommender with explicit top_k=20
+                recommender = ImprovedMultiGenreRecommender(
+                    media_type=media_type, 
+                    lang_id=lang_id, 
+                    top_k=20,
+                    equal_genre_distribution=False  # Disable to ensure consistent count
+                )
                 
                 # Get recommendations
                 recs = recommender.get_recommendations(clicked_ids=clicked_ids)
+                
+                # Ensure exactly 20 recommendations
+                if len(recs) > 20:
+                    recs = recs[:20]
                 
                 if recs:
                     st.subheader("✨ Recommended For You:")
