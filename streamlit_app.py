@@ -1,5 +1,5 @@
 import streamlit as st
-from enhanced_test_improved_updated_full import ImprovedMultiGenreRecommender
+from enhanced_test import ImprovedMultiGenreRecommender
 import pandas as pd
 
 @st.cache_data
