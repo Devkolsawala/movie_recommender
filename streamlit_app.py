@@ -70,7 +70,7 @@ if st.button("🔮 Get AI Recommendations"):
                 recommender = ImprovedMultiGenreRecommender(media_type=media_type, lang_id=lang_id)
                 
                 # Get recommendations
-                recs = recommender.get_recommendations(clicked_ids=clicked_ids, apply_genre_split=True)
+                recs = recommender.get_recommendations(clicked_ids=clicked_ids)
                 
                 if recs:
                     st.subheader("✨ Recommended For You:")
