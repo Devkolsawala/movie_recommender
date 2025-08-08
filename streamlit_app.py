@@ -34,7 +34,7 @@ if st.button("🔮 Get AI Recommendations") and clicked_titles:
     recommender = ImprovedMultiGenreRecommender(media_type=media_type, lang_id=lang_id)
     recs = recommender.get_recommendations(clicked_ids=clicked_ids)
 
-    st.subheader("✨ Recommended 20 Movies For You based on your current movie preferences:")
+    st.subheader("✨ Here Are Recommended Movies for You Based on Your Current Preferences")
     st.write(f"Showing {len(recs)} recommendations based on your selection.")
 
     for idx, rec in enumerate(recs, start=1):
@@ -42,6 +42,7 @@ if st.button("🔮 Get AI Recommendations") and clicked_titles:
             st.markdown(f"**Genres:** {rec['genres']}")
             st.markdown(f"**IMDB Rating:** {rec['imdb_rating']}")
             st.markdown(f"**Views:** {rec['views']}")
+
 
 
 
