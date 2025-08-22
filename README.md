@@ -6,7 +6,7 @@
 An advanced content-based movie recommender system that uses deep semantic understanding, genre alignment, popularity metrics, and rating similarity to generate highly accurate and diverse movie recommendations.
 
 ---
-  🌐 Live Demo: Movie Recommender Demo
+🌐 **Live Demo:** [Movie Recommender Demo](https://movierecommender-olddmm7qovbgmhpajusjmp.streamlit.app/)
 ## 🚀 Features
 
 - ✅ **Semantic Matching with Transformers** using `all-mpnet-base-v2`
