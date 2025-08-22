@@ -22,7 +22,7 @@ An advanced content-based movie recommender system that uses deep semantic under
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/movie-recommender.git
+git clone https://github.com/Devkolsawala/movie-recommender.git
 cd movie-recommender
 ```
 
